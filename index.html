@@ -150,7 +150,9 @@ svg{display:block}
 .wavebg{position:absolute;left:0;right:0;bottom:0;pointer-events:none;opacity:.9;z-index:-1}
 .live-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.06em;
   color:var(--ok);background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);padding:5px 11px;border-radius:99px;text-transform:uppercase}
+.live-pill.warn{color:#D97706;background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.35)}
 .live-pill i{width:7px;height:7px;border-radius:50%;background:var(--ok);animation:livepulse 2s infinite}
+.live-pill.warn i{background:#D97706}
 @keyframes livepulse{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.45)}55%{box-shadow:0 0 0 8px rgba(34,197,94,0)}}
 .auth-top{display:flex;justify-content:flex-end;margin-bottom:4px}
 .auth-head{text-align:center;margin:18px 0 24px}
@@ -256,6 +258,9 @@ svg{display:block}
 .rules-code{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px;
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.55;
   overflow-x:auto;white-space:pre;user-select:all;margin-bottom:16px;color:var(--text)}
+.connect-status{display:flex;align-items:center;gap:10px;justify-content:center;padding:6px 0 2px;
+  font-size:13px;font-weight:700;color:var(--accent)}
+.connect-status .spinner{margin:0;width:18px;height:18px;border-width:2.5px}
 .detail{position:fixed;inset:0;z-index:70;background:var(--bg);display:flex;flex-direction:column;
   transform:translateY(4%);opacity:0;visibility:hidden;transition:.34s cubic-bezier(.22,1,.36,1)}
 .detail.open{transform:none;opacity:1;visibility:visible}
@@ -430,7 +435,20 @@ svg{display:block}
 .lightbox .lbmedia{max-width:min(560px,92vw);border-radius:20px;overflow:hidden;box-shadow:var(--shadow-lg);line-height:0}
 .lightbox .lbmedia img,.lightbox .lbmedia video{width:100%;height:auto;max-height:70vh;object-fit:contain}
 .lightbox .lbx{position:absolute;top:calc(16px + env(safe-area-inset-top));right:16px;width:44px;height:44px;border-radius:50%;
-  background:rgba(255,255,255,.14);color:#fff;display:grid;place-items:center;font-size:22px}
+  background:rgba(255,255,255,.14);color:#fff;display:grid;place-items:center;font-size:22px;z-index:3}
+/* messenger-style story viewer */
+.storyv{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;cursor:default}
+.storyv .svzone{position:absolute;top:0;bottom:0;width:33%;z-index:3;background:transparent;border:0}
+.storyv .svzone.l{left:0}.storyv .svzone.r{right:0;width:44%}
+.storyv .svbar{position:absolute;top:10px;left:12px;right:12px;height:3.5px;border-radius:4px;background:rgba(255,255,255,.3);overflow:hidden;z-index:4}
+.storyv .svfill{height:100%;width:0;background:#fff}
+.storyv .svwho{position:absolute;top:22px;left:14px;font-size:13px;text-shadow:0 1px 4px rgba(0,0,0,.4);z-index:4;font-weight:800}
+.storyv .svtime{position:absolute;top:24px;right:14px;font-size:11px;opacity:.85;text-shadow:0 1px 4px rgba(0,0,0,.4);z-index:4}
+.storyv .svmedia{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.storyv .svtext{color:#fff;text-align:center;font-size:22px;font-weight:700;padding:30px;max-width:92%}
+.storyv .svnavdots{position:absolute;bottom:16px;left:0;right:0;display:flex;justify-content:center;gap:5px;z-index:4}
+.storyv .svnavdots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.45)}
+.storyv .svnavdots i.on{background:#fff}
 .pf-hero{display:flex;flex-direction:column;align-items:center;padding:8px 0 4px}
 .pf-ava{position:relative}
 .pf-ava .cam{position:absolute;right:-2px;bottom:-2px;width:34px;height:34px;border-radius:50%;background:var(--grad);
@@ -751,19 +769,19 @@ svg{display:block}
 'use strict';
 /* ════════════════════════════════════════════════════════════
    1. CONFIG — 100% FREE STACK, NO demo data
-   Accounts → Firebase Auth · Chats/presence/etc → Firebase RTDB
-   Media → inside Firebase (compressed base64) or optional Cloudinary
-   Calls → real WebRTC (RTDB signaling + Google STUN)
-
-   v3.5.0 CHANGES (per request):
-   • Friend system is now INSTANT: entering a valid unique code adds
-     both sides as friends immediately (no request/accept flow), with
-     an automatic greeting message so the chat opens ready to reply.
-   • Profile edits (name/photo) are written to Firebase immediately
-     and the server profile is the source of truth on every boot.
-   Required RTDB rules (Publish):
+   v3.6.0 reliability fixes:
+   • Every Firebase request has a 20s timeout — nothing spins forever.
+   • Profile name/photo/bio ALWAYS save to Firebase via UserSync
+     queue (no longer gated on a successful boot), retried until sent.
+   • 401/403 responses open the RTDB-rules setup modal with a Retry.
+   • Boot auto-retries in the background until the cloud connects.
+   • Story images are compressed harder and the story viewer is
+     messenger-style (tap left/right, progress bar, auto-advance).
+   Required RTDB rules (Publish in Firebase Console):
    { "rules": { "zahra": { ".read":"auth != null", ".write":"auth != null" } } }
-   Google login: enable Google provider + add domain to Authorized domains.
+   Google login: enable Google provider + add your domain to
+   Authentication → Settings → Authorized domains (add your Vercel
+   domain too, e.g. your-app.vercel.app).
 */
 const CLOUD = {
   fb: {
@@ -778,10 +796,11 @@ const CLOUD = {
     uploadPreset: ''
   }
 };
-const PROD_CONFIG = { appName:'Zahra', version:'3.5.0' };
+const PROD_CONFIG = { appName:'Zahra', version:'3.6.0' };
 const REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const MEDIA_MAX_VIDEO_MB = 5;
 const MEDIA_MAX_RAW_MB   = 5;
+const FETCH_TIMEOUT      = 20000;
 
 /* ════════════════════════════════════════════════════════════
    2. TRANSLATIONS (English + বাংলা)
@@ -789,7 +808,7 @@ const MEDIA_MAX_RAW_MB   = 5;
 const I18N = {
 en:{
   tagline:'More Than Just a Chat',connect:'Connect',chat:'Chat',share:'Share',loading:'Loading…',
-  welcome_btn:'Get Started',live:'Live',or_email:'Or sign up with email',
+  welcome_btn:'Get Started',live:'Live',connecting_state:'Connecting…',or_email:'Or sign up with email',
   login_title:'Welcome Back',login_sub:'Sign in to continue to your account',email_or_username:'Email or Username',
   password:'Password',login_btn:'Login',or_continue:'Or continue with',google:'Google',use_email:'Use email',
   google_signin:'Continue with Google',
@@ -801,9 +820,10 @@ en:{
   err_required:'Please fill in this field',err_email:'Please enter a valid email address',
   err_pass:'Password must be at least 6 characters',err_name:'Please enter your name',
   err_credentials:'Email or password is incorrect.',
-  err_email_exists:'An account with this email already exists',err_network:'Network error — check your connection',
+  err_email_exists:'An account with this email already exists',err_network:'Network connection error — check your internet and try again',
   err_google:'Google sign-in failed',
-  err_google_setup:'Google sign-in needs setup: Firebase Console → Authentication → Sign-in method → enable Google; then add your site domain under Authentication → Settings → Authorized domains.',
+  err_google_setup:'Google sign-in needs setup: Firebase Console → Authentication → Sign-in method → enable Google; then add your site domain (including your Vercel domain) under Authentication → Settings → Authorized domains.',
+  err_cloud_rules:'Database rules are blocking Zahra. Publish the required Realtime Database rules (shown below).',
   toast_account_created:'Account created — welcome to Zahra!',toast_welcome:'Welcome back!',
   toast_reset_sent:'Password reset email sent — check your inbox',
   nav_chats:'Chats',nav_calls:'Calls',nav_contacts:'Contacts',nav_settings:'Settings',
@@ -840,7 +860,7 @@ en:{
   my_code:'My friend code',my_code_h:'Share this code — friends add you with it',
   code_copied:'Friend code copied',
   add_friend:'Add friend',add_friend_h:"Enter your friend's 6-character code — you'll be connected instantly",code_ph:'e.g. K7M3PX',
-  find:'Connect',friend_connected:'You and {n} are now friends!',
+  find:'Connect',connecting_now:'Connecting…',friend_connected:'You and {n} are now friends!',
   greeting:'👋 Hi! We are connected on Zahra now.',
   self_code:"That's your own code",already_friend:'Already in your friends',
   not_found_code:'No Zahra user found for this code',
@@ -848,7 +868,7 @@ en:{
   remove_friend:'Remove friend',remove_fr_t:'Remove friend?',
   remove_fr_b:'{n} will be removed from your friends. Your chat will stay.',
   rules_title:'One setup step left',
-  rules_body:'Firebase Realtime Database rules are blocking Zahra.\n\n1. Open Firebase Console → Realtime Database → Rules\n2. Replace with the JSON below and click Publish',
+  rules_body:'Firebase Realtime Database rules are blocking Zahra.\n\n1. Open Firebase Console → Realtime Database → Rules\n2. Replace with the JSON below and click Publish\n3. Wait ~1 minute, then tap Retry',
   rules_copy:'Copy rules',rules_retry:'Retry',
   profile_title:'Profile',edit_profile:'Edit Profile',bio_ph:'Tell the world a little about you',
   media_links_docs:'Media',starred_messages:'Starred Messages',chat_settings_row:'Chat Settings',
@@ -881,11 +901,11 @@ en:{
   sec_contacts:'Friends',no_results_t:'No results',no_results_h:'Try a different search term.',
   newchat_title:'New conversation',newchat_hint:'Start a chat with one of your friends',
   about_title:'About',version_label:'Version',
-  about_p:'Zahra is a premium messaging app — real-time messaging via Firebase, media inside the free Firebase tier, real WebRTC calls, Google sign-in, and instant friend connection by unique code. 100% free to run.',
+  about_p:'Zahra is a premium messaging app — real-time messaging via Firebase, media inside the free Firebase tier, real WebRTC calls, Google sign-in, instant friend connection by unique code, and messenger-style stories. 100% free to run.',
   features_title:'Highlights',feat_chat:'Real-time messaging (Firebase)',feat_calls:'Real voice & video calls (WebRTC)',
   feat_media:'Photos, videos & voice notes (free tier)',feat_private:'Private — friends by unique code only',feat_lang:'English & বাংলা',
   infra_title:'Cost & setup',
-  infra_p:'This app runs entirely on the FREE Firebase Spark plan — no card needed.\n• Auth: free · RTDB: 1 GB stored, 10 GB/month download.\n• Photos are auto-compressed, voice notes are small; video is capped at 5 MB.\n• Friends connect instantly when you enter their unique code.\n• For larger files, add a free Cloudinary unsigned preset in CLOUD.media.\n• Only setup: RTDB rules allow signed-in users on /zahra; enable Google provider + authorized domain for Google login.',
+  infra_p:'This app runs entirely on the FREE Firebase Spark plan — no card needed.\n• Auth: free · RTDB: 1 GB stored, 10 GB/month download.\n• Deploy the SAME latest file to localhost and Vercel — old deployments cause mismatched behavior.\n• Google login: enable the Google provider AND add every domain you deploy on (localhost is pre-allowed; add your Vercel domain) under Authentication → Settings → Authorized domains.\n• Required RTDB rules: signed-in users allowed on /zahra.\n• For larger files, add a free Cloudinary unsigned preset in CLOUD.media.',
   about_rights:'Made with care · Zahra',
   empty_chats_t:'No conversations',empty_chats_h:'Add a friend with their code, then tap compose.',
   empty_calls_t:'No calls yet',empty_calls_h:'Your real call history will appear here.',
@@ -893,11 +913,11 @@ en:{
   starred_title:'Starred Messages',empty_starred_t:'No starred messages',empty_starred_h:'Long-press a message and choose Star.',
   cancel:'Cancel',save:'Save',close:'Close',confirm:'Confirm',
   view_contact:'View friend',
-  help_text:'Zahra — real-time, 100% free mode.\n\n• Friends connect INSTANTLY: enter their unique 6-character code and you are both connected right away, with an automatic greeting in the chat.\n• Your data lives in Firebase — sign in from ANY device and everything comes back.\n• Profile name & photo save to Firebase immediately.\n• Required DB rules: {"rules":{"zahra":{".read":"auth != null",".write":"auth != null"}}}\n• Google login: enable Google provider + add your domain to Authorized domains.\n• Bigger files? Add a free Cloudinary unsigned preset in CLOUD.media.\n• Calls are real WebRTC; strict NATs may need TURN.'
+  help_text:'Zahra — real-time, 100% free mode.\n\n• Friends connect INSTANTLY: enter their unique 6-character code → both sides are friends immediately, with an automatic greeting in the chat.\n• Your data lives in Firebase — sign in from ANY device and everything comes back.\n• Profile name & photo always save to Firebase (queued + retried if the network is slow).\n• Stories: messenger-style viewer — tap left/right, auto-advance.\n• Required DB rules: {"rules":{"zahra":{".read":"auth != null",".write":"auth != null"}}}\n• Google login: enable Google provider + add your Vercel domain to Authorized domains.\n• Bigger files? Add a free Cloudinary unsigned preset in CLOUD.media.\n• Calls are real WebRTC; strict NATs may need TURN.'
 },
 bn:{
   tagline:'শুধু চ্যাট নয়, তার বেশি',connect:'সংযোগ',chat:'চ্যাট',share:'শেয়ার',loading:'লোড হচ্ছে…',
-  welcome_btn:'শুরু করুন',live:'লাইভ',or_email:'অথবা ইমেইল দিয়ে সাইন আপ',
+  welcome_btn:'শুরু করুন',live:'লাইভ',connecting_state:'সংযোগ হচ্ছে…',or_email:'অথবা ইমেইল দিয়ে সাইন আপ',
   login_title:'স্বাগতম',login_sub:'আপনার অ্যাকাউন্টে চালিয়ে যেতে সাইন ইন করুন',email_or_username:'ইমেইল বা ইউজারনেম',
   password:'পাসওয়ার্ড',login_btn:'লগইন',or_continue:'অথবা চালিয়ে যান',google:'Google',use_email:'ইমেইল দিয়ে',
   google_signin:'Google দিয়ে চালিয়ে যান',
@@ -909,9 +929,10 @@ bn:{
   err_required:'এই ঘরটি পূরণ করুন',err_email:'সঠিক ইমেইল ঠিকানা দিন',
   err_pass:'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে',err_name:'আপনার নাম লিখুন',
   err_credentials:'ইমেইল বা পাসওয়ার্ড সঠিক নয়।',
-  err_email_exists:'এই ইমেইলে আগেই অ্যাকাউন্ট আছে',err_network:'নেটওয়ার্ক সমস্যা — সংযোগ চেক করুন',
+  err_email_exists:'এই ইমেইলে আগেই অ্যাকাউন্ট আছে',err_network:'নেটওয়ার্ক সংযোগ সমস্যা — ইন্টারনেট চেক করে আবার চেষ্টা করুন',
   err_google:'Google সাইন-ইন ব্যর্থ হয়েছে',
-  err_google_setup:'Google সাইন-ইনের জন্য সেটআপ দরকার: Firebase Console → Authentication → Sign-in method → Google চালু করুন; তারপর Authentication → Settings → Authorized domains-এ আপনার সাইটের ডোমেইন যোগ করুন।',
+  err_google_setup:'Google সাইন-ইনের জন্য সেটআপ দরকার: Firebase Console → Authentication → Sign-in method → Google চালু করুন; তারপর Authentication → Settings → Authorized domains-এ আপনার সাইটের ডোমেইন (Vercel ডোমেইনসহ) যোগ করুন।',
+  err_cloud_rules:'ডাটাবেস রুলস Zahra-কে আটকাচ্ছে। নিচের দরকারি Realtime Database rules Publish করুন।',
   toast_account_created:'অ্যাকাউন্ট তৈরি হয়েছে — Zahra-তে স্বাগতম!',toast_welcome:'আবার স্বাগতম!',
   toast_reset_sent:'পাসওয়ার্ড রিসেট ইমেইল পাঠানো হয়েছে — ইনবক্স দেখুন',
   nav_chats:'চ্যাট',nav_calls:'কল',nav_contacts:'কন্টাক্ট',nav_settings:'সেটিংস',
@@ -948,7 +969,7 @@ bn:{
   my_code:'আমার বন্ধু কোড',my_code_h:'এই কোড শেয়ার করুন — বন্ধুরা এটা দিয়ে আপনাকে যোগ করবে',
   code_copied:'বন্ধু কোড কপি হয়েছে',
   add_friend:'বন্ধু যোগ করুন',add_friend_h:'বন্ধুর ৬ অক্ষরের কোড লিখুন — সাথে সাথেই সংযোগ হবে',code_ph:'যেমন K7M3PX',
-  find:'সংযোগ করুন',friend_connected:'আপনি ও {n} এখন বন্ধু!',
+  find:'সংযোগ করুন',connecting_now:'সংযোগ হচ্ছে…',friend_connected:'আপনি ও {n} এখন বন্ধু!',
   greeting:'👋 হাই! আমরা এখন Zahra-তে সংযুক্ত।',
   self_code:'এটি আপনার নিজের কোড',already_friend:'ইতিমধ্যে আপনার বন্ধু',
   not_found_code:'এই কোডে কোনো Zahra ব্যবহারকারী পাওয়া যায়নি',
@@ -956,7 +977,7 @@ bn:{
   remove_friend:'বন্ধু সরান',remove_fr_t:'বন্ধু সরাবেন?',
   remove_fr_b:'{n} আপনার বন্ধু তালিকা থেকে সরে যাবে। চ্যাট থাকবে।',
   rules_title:'শুধু একটি সেটআপ বাকি',
-  rules_body:'Firebase Realtime Database rules Zahra-কে আটকাচ্ছে।\n\n১. Firebase Console → Realtime Database → Rules খুলুন\n২. নিচের JSON বসিয়ে Publish চাপুন',
+  rules_body:'Firebase Realtime Database rules Zahra-কে আটকাচ্ছে।\n\n১. Firebase Console → Realtime Database → Rules খুলুন\n২. নিচের JSON বসিয়ে Publish চাপুন\n৩. প্রায় ১ মিনিট অপেক্ষা করে Retry চাপুন',
   rules_copy:'Rules কপি করুন',rules_retry:'আবার চেষ্টা করুন',
   profile_title:'প্রোফাইল',edit_profile:'প্রোফাইল সম্পাদনা',bio_ph:'নিজের সম্পর্কে কিছু লিখুন',
   media_links_docs:'মিডিয়া',starred_messages:'স্টার করা বার্তা',chat_settings_row:'চ্যাট সেটিংস',
@@ -989,11 +1010,11 @@ bn:{
   sec_contacts:'বন্ধু',no_results_t:'কোনো ফলাফল নেই',no_results_h:'অন্য কিছু লিখে খুঁজুন।',
   newchat_title:'নতুন কথোপকথন',newchat_hint:'আপনার বন্ধুদের সাথে চ্যাট শুরু করুন',
   about_title:'সম্পর্কে',version_label:'সংস্করণ',
-  about_p:'Zahra একটি প্রিমিয়াম মেসেজিং অ্যাপ — রিয়েল-টাইম মেসেজিং Firebase-এ, মিডিয়া ফ্রি Firebase টিয়ারের ভেতরে, আসল WebRTC কল, Google সাইন-ইন এবং ইউনিক কোড দিয়ে তাৎক্ষণিক বন্ধু সংযোগ। চালাতে ১০০% ফ্রি।',
+  about_p:'Zahra একটি প্রিমিয়াম মেসেজিং অ্যাপ — রিয়েল-টাইম মেসেজিং Firebase-এ, মিডিয়া ফ্রি Firebase টিয়ারের ভেতরে, আসল WebRTC কল, Google সাইন-ইন, ইউনিক কোড দিয়ে তাৎক্ষণিক বন্ধু সংযোগ এবং মেসেঞ্জার-স্টাইল স্টোরি। চালাতে ১০০% ফ্রি।',
   features_title:'বিশেষত্ব',feat_chat:'রিয়েল-টাইম মেসেজিং (Firebase)',feat_calls:'আসল ভয়েস ও ভিডিও কল (WebRTC)',
   feat_media:'ছবি, ভিডিও ও ভয়েস নোট (ফ্রি টিয়ার)',feat_private:'প্রাইভেট — শুধু কোড দিয়েই বন্ধু',feat_lang:'English ও বাংলা',
   infra_title:'খরচ ও সেটআপ',
-  infra_p:'এই অ্যাপ সম্পূর্ণ ফ্রি Firebase Spark প্ল্যানে চলে — কার্ড লাগে না।\n• Auth ফ্রি · RTDB: ১ জিবি স্টোর, মাসে ১০ জিবি ডাউনলোড।\n• ছবি auto-compress হয়; ভিডিও সর্বোচ্চ ৫ MB।\n• ইউনিক কোড দিলেই বন্ধু সংযোগ তাৎক্ষণিক হয়।\n• বড় ফাইলের জন্য CLOUD.media-তে ফ্রি Cloudinary unsigned preset দিন।\n• একমাত্র সেটআপ: RTDB rules সাইন-ইন ইউজারদের অনুমতি দিন; Google লগইনের জন্য provider চালু + ডোমেইন যোগ করুন।',
+  infra_p:'এই অ্যাপ সম্পূর্ণ ফ্রি Firebase Spark প্ল্যানে চলে — কার্ড লাগে না।\n• Auth ফ্রি · RTDB: ১ জিবি স্টোর, মাসে ১০ জিবি ডাউনলোড।\n• localhost ও Vercel — দুই জায়গাতেই SAME latest ফাইল deploy করুন; পুরনো deploy থাকলে আচরণে পার্থক্য দেখায়।\n• Google লগইন: Google provider চালু করুন এবং যেসব ডোমেইনে deploy করেন সব (Vercel ডোমেইনসহ) Authorized domains-এ যোগ করুন।\n• দরকারি RTDB rules: সাইন-ইন ইউজারদের /zahra-তে অনুমতি।\n• বড় ফাইলের জন্য CLOUD.media-তে ফ্রি Cloudinary unsigned preset দিন।',
   about_rights:'যত্ন সহকারে তৈরি · Zahra',
   empty_chats_t:'কোনো কথোপকথন নেই',empty_chats_h:'বন্ধুর কোড দিয়ে যোগ করুন, তারপর কম্পোজ ট্যাপ করুন।',
   empty_calls_t:'এখনও কোনো কল নেই',empty_calls_h:'আপনার আসল কল হিস্টোরি এখানে দেখা যাবে।',
@@ -1001,7 +1022,7 @@ bn:{
   starred_title:'স্টার করা বার্তা',empty_starred_t:'কোনো স্টার করা বার্তা নেই',empty_starred_h:'কোনো বার্তায় লম্বা চাপ দিয়ে Star বেছে নিন।',
   cancel:'বাতিল',save:'সেভ',close:'বন্ধ করুন',confirm:'নিশ্চিত করুন',
   view_contact:'বন্ধু দেখুন',
-  help_text:'Zahra — রিয়েল-টাইম, ১০০% ফ্রি মোড।\n\n• বন্ধু সংযোগ তাৎক্ষণিক: ৬ অক্ষরের ইউনিক কোড দিলেই দুই পক্ষ সাথে সাথে বন্ধু হয়ে যায়, চ্যাটে স্বয়ংক্রিয় গ্রিটিং আসে।\n• আপনার ডেটা Firebase-এ থাকে — যেকোনো ডিভাইসে সাইন ইন করলেই সব ফিরে আসে।\n• প্রোফাইল নাম ও ছবি সাথে সাথে Firebase-এ সেভ হয়।\n• দরকারি DB rules: {"rules":{"zahra":{".read":"auth != null",".write":"auth != null"}}}\n• Google লগইন: Google provider চালু + Authorized domains-এ ডোমেইন যোগ।\n• বড় ফাইল? CLOUD.media-তে ফ্রি Cloudinary unsigned preset দিন।\n• কল আসল WebRTC; কঠোর NAT-এ TURN লাগতে পারে।'
+  help_text:'Zahra — রিয়েল-টাইম, ১০০% ফ্রি মোড।\n\n• বন্ধু সংযোগ তাৎক্ষণিক: ৬ অক্ষরের ইউনিক কোড দিলেই দুই পক্ষ সাথে সাথে বন্ধু হয়ে যায়, চ্যাটে স্বয়ংক্রিয় গ্রিটিং আসে।\n• আপনার ডেটা Firebase-এ থাকে — যেকোনো ডিভাইসে সাইন ইন করলেই সব ফিরে আসে।\n• প্রোফাইল নাম ও ছবি সবসময় Firebase-এ সেভ হয় (নেট ধীর হলে queue হয়ে পরে পাঠানো হয়)।\n• স্টোরি: মেসেঞ্জার-স্টাইল ভিউয়ার — বাঁয়ে/ডানে ট্যাপ, auto-advance।\n• দরকারি DB rules: {"rules":{"zahra":{".read":"auth != null",".write":"auth != null"}}}\n• Google লগইন: Google provider চালু + Vercel ডোমেইন Authorized domains-এ যোগ।\n• বড় ফাইল? CLOUD.media-তে ফ্রি Cloudinary unsigned preset দিন।\n• কল আসল WebRTC; কঠোর NAT-এ TURN লাগতে পারে।'
 }};
 function tf(k,vars){var s=(I18N[state.lang]&&I18N[state.lang][k])||I18N.en[k]||k;
   if(vars){for(var v in vars){s=s.split('{'+v+'}').join(vars[v])}}
@@ -1038,12 +1059,32 @@ function fmtListTime(ts){const d=new Date(ts),n=new Date();
 function fmtDur(s){return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')}
 function fmtSize(b){return b>1048576?(b/1048576).toFixed(1)+' MB':Math.max(1,Math.round(b/1024))+' KB'}
 function pushOnce(){if(!history.state||history.state.z===undefined){try{history.pushState({z:1},'')}catch(e){}}}
+/* FIX: every request now has a hard timeout — no more infinite spinners */
+function fetchTO(url,opts,ms){
+  ms=ms||FETCH_TIMEOUT;
+  let ctrl=null,tm=null;
+  if(typeof AbortController!=='undefined'){
+    ctrl=new AbortController();
+    tm=setTimeout(function(){try{ctrl.abort()}catch(e){}},ms);
+  }
+  const o=Object.assign({},opts||{});
+  if(ctrl)o.signal=ctrl.signal;
+  return fetch(url,o).then(function(r){if(tm)clearTimeout(tm);return r},
+    function(e){if(tm)clearTimeout(tm);throw e});
+}
 function authErrText(e){const m=(e&&e.message)||'';
   if(m.indexOf('EMAIL_EXISTS')>=0)return t('err_email_exists');
   if(m.indexOf('WEAK_PASSWORD')>=0)return t('err_pass');
   if(m.indexOf('EMAIL_NOT_FOUND')>=0||m.indexOf('INVALID_PASSWORD')>=0||m.indexOf('INVALID_LOGIN_CREDENTIALS')>=0||m.indexOf('INVALID_EMAIL')>=0)return t('err_credentials');
-  if(m==='NETWORK'||m==='Failed to fetch')return t('err_network');
+  if(m==='NETWORK'||m==='Failed to fetch'||m==='AbortError')return t('err_network');
   return t('err_credentials')}
+/* FIX: DB 401/403 → open the rules setup modal automatically */
+function dbErrToast(e){
+  const m=String((e&&e.message)||e||'');
+  if(m.indexOf('DB401')>=0||m.indexOf('DB403')>=0){
+    toast(t('err_cloud_rules'),'err');showRulesHelp();return}
+  toast(t('err_network'),'err');
+}
 function emoKey(e){let s='';for(const ch of String(e)){s+=ch.codePointAt(0).toString(16)+'-'}return s.slice(0,-1)||'x'}
 function keyEmo(k){try{return k.split('-').map(h=>String.fromCodePoint(parseInt(h,16))).join('')}catch(e){return '❓'}}
 const CODE_ALPH='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -1055,7 +1096,7 @@ function mediaErrText(e){const m=String((e&&e.message)||e||'');
   if(m.indexOf('TOOBIGVIDEO')>=0)return tf('err_too_big_video',{n:MEDIA_MAX_VIDEO_MB});
   if(m.indexOf('TOOBIG')>=0)return tf('err_too_big_file',{n:MEDIA_MAX_RAW_MB});
   if(m.indexOf('CLOUDUP')>=0)return t('upload_failed')+' (Cloudinary '+m+')';
-  return t('upload_failed')}
+  return t('err_network')}
 function setBusy(node,busy){if(node&&node.style){node.disabled=busy;node.style.opacity=busy?.6:1}}
 
 /* ════════════════════════════════════════════════════════════
@@ -1180,7 +1221,7 @@ function toast(msg,type){
   const root=$('#toastRoot');while(root.children.length>2)root.firstChild.remove();
   const n=el('div','toast'+(type==='err'?' err':''));n.innerHTML='<span class="tic">'+ic(type==='err'?'warn':'check')+'</span>';
   n.appendChild(document.createTextNode(msg));root.appendChild(n);
-  setTimeout(()=>{n.classList.add('out');setTimeout(()=>n.remove(),320)},3500);
+  setTimeout(()=>{n.classList.add('out');setTimeout(()=>n.remove(),320)},3800);
 }
 let sheetEl=null;
 function openSheet(title,build){
@@ -1232,14 +1273,14 @@ function copyText(txt){copyRaw(txt)}
 function fallbackCopy(txt,done){const ta=el('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done()}catch(e){}ta.remove()}
 
 /* ════════════════════════════════════════════════════════════
-   7. FIREBASE — AUTH REST + RTDB REST/SSE
+   7. FIREBASE — AUTH REST + RTDB REST/SSE (all with timeout)
    ════════════════════════════════════════════════════════════ */
 const FB={
   tok:null,rtok:null,uid:null,email:null,_ri:null,subs:[],
   url(p){return CLOUD.fb.dbUrl+p+'.json'},
   async api(url,body){
     let r;
-    try{r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
+    try{r=await fetchTO(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
     catch(e){throw new Error('NETWORK')}
     const j=await r.json();
     if(!r.ok)throw new Error((j.error&&j.error.message)||('HTTP '+r.status));
@@ -1255,8 +1296,9 @@ const FB={
     try{
       const j=await this.api('https://securetoken.googleapis.com/v1/token?key='+CLOUD.fb.apiKey,{grant_type:'refresh_token',refresh_token:this.rtok});
       this.tok=j.id_token;this.rtok=j.refresh_token;this.uid=j.user_id;
+      UserSync.flush();
       return true;
-    }catch(e){this.hardSignOut();return false}},
+    }catch(e){return false}},
   hardSignOut(){this.tok=null;this.rtok=null;this.uid=null;store.rem(KEY+'_sess');clearInterval(this._ri);Cloud.teardown()},
   async signUp(email,pass,name){
     const j=await this.api('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+CLOUD.fb.apiKey,{email:email,password:pass,returnSecureToken:true});
@@ -1269,10 +1311,10 @@ const FB={
     await this.api('https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key='+CLOUD.fb.apiKey,{requestType:'PASSWORD_RESET',email:email})},
   async changePassword(newPass){
     await this.api('https://identitytoolkit.googleapis.com/v1/accounts:update?key='+CLOUD.fb.apiKey,{idToken:this.tok,password:newPass,returnSecureToken:true})},
-  async get(p){const r=await fetch(this.url(p)+'?auth='+this.tok);if(!r.ok)throw new Error('DB'+r.status);return r.json()},
-  async put(p,v){const r=await fetch(this.url(p)+'?auth='+this.tok,{method:'PUT',body:JSON.stringify(v===undefined?null:v)});if(!r.ok)throw new Error('DB'+r.status);return true},
-  async patch(p,v){const r=await fetch(this.url(p)+'?auth='+this.tok,{method:'PATCH',body:JSON.stringify(v)});if(!r.ok)throw new Error('DB'+r.status);return true},
-  async post(p,v){const r=await fetch(this.url(p)+'?auth='+this.tok,{method:'POST',body:JSON.stringify(v)});if(!r.ok)throw new Error('DB'+r.status);const j=await r.json();return j&&j.name},
+  async get(p){const r=await fetchTO(this.url(p)+'?auth='+this.tok);if(!r.ok)throw new Error('DB'+r.status);return r.json()},
+  async put(p,v){const r=await fetchTO(this.url(p)+'?auth='+this.tok,{method:'PUT',body:JSON.stringify(v===undefined?null:v)});if(!r.ok)throw new Error('DB'+r.status);return true},
+  async patch(p,v){const r=await fetchTO(this.url(p)+'?auth='+this.tok,{method:'PATCH',body:JSON.stringify(v)});if(!r.ok)throw new Error('DB'+r.status);return true},
+  async post(p,v){const r=await fetchTO(this.url(p)+'?auth='+this.tok,{method:'POST',body:JSON.stringify(v)});if(!r.ok)throw new Error('DB'+r.status);const j=await r.json();return j&&j.name},
   listen(p,cb){
     const es=new EventSource(this.url(p)+'?auth='+this.tok);
     const h=e=>{try{const d=JSON.parse(e.data);cb(d.path,d.data)}catch(x){}};
@@ -1284,7 +1326,30 @@ const FB={
 };
 
 /* ════════════════════════════════════════════════════════════
-   8. MEDIA — free mode (base64 inside Firebase) or Cloudinary
+   8. USER SYNC — profile writes NEVER get lost.
+   If the token or network isn't ready, the patch is queued and
+   retried on every boot/login/refresh until Firebase accepts it.
+   ════════════════════════════════════════════════════════════ */
+const UserSync={
+  queue:{},
+  push(patch){
+    Object.assign(this.queue,patch);
+    return this.flush()},
+  async flush(){
+    if(!FB.tok||!FB.uid)return false;
+    if(!Object.keys(this.queue).length)return true;
+    const data=this.queue;this.queue={};
+    try{
+      await FB.patch('/zahra/users/'+FB.uid,data);
+      return true;
+    }catch(e){
+      Object.assign(this.queue,data); // keep for retry on next flush/boot
+      return false;
+    }}
+};
+
+/* ════════════════════════════════════════════════════════════
+   9. MEDIA — free mode (base64 inside Firebase) or Cloudinary
    ════════════════════════════════════════════════════════════ */
 function compressImage(file,maxSide,q){
   return new Promise((res)=>{
@@ -1320,11 +1385,25 @@ const MEDIA={
     fd.append('file',file);
     fd.append('upload_preset',CLOUD.media.uploadPreset);
     let r;
-    try{r=await fetch('https://api.cloudinary.com/v1_1/'+CLOUD.media.cloudName+'/auto/upload',{method:'POST',body:fd})}
+    try{r=await fetchTO('https://api.cloudinary.com/v1_1/'+CLOUD.media.cloudName+'/auto/upload',{method:'POST',body:fd},60000)}
     catch(e){throw new Error('NETWORK')}
     if(!r.ok)throw new Error('CLOUDUP'+r.status);
     const j=await r.json();
     return j.secure_url||j.url;
+  },
+  /* stories: shrink until small enough for one RTDB write */
+  async storyDataUrl(file){
+    let side=720,q=0.62;
+    let blob=await compressImage(file,side,q);
+    let url=await blobToDataURL(blob);
+    let guard=0;
+    while(url.length>850*1024&&side>300&&guard<6){
+      side=Math.round(side*0.75);q=Math.max(0.45,q-0.08);
+      blob=await compressImage(file,side,q);
+      url=await blobToDataURL(blob);guard++;
+    }
+    if(url.length>9.5*1024*1024)throw new Error('TOOBIG');
+    return url;
   },
   async upload(file,fname,ctype){
     const type=ctype||file.type||'application/octet-stream';
@@ -1346,7 +1425,7 @@ const MEDIA={
 };
 
 /* ════════════════════════════════════════════════════════════
-   9. GOOGLE SIGN-IN — real Firebase Auth via compat SDK (lazy)
+   10. GOOGLE SIGN-IN — real Firebase Auth via compat SDK (lazy)
    ════════════════════════════════════════════════════════════ */
 let gAuthPr=null;
 function loadScript(src){return new Promise((res,rej)=>{
@@ -1407,8 +1486,8 @@ async function handleGUser(u){
     username:prof.username||((u.email||'user').split('@')[0].replace(/[^a-z0-9_]/g,'')||'user'),
     bio:prof.bio||'',hue:(prof.hue!=null)?prof.hue:Math.floor(Math.random()*360),
     photo:prof.photo||u.photoURL||'',email:u.email||''};
-  FB.patch('/zahra/users/'+FB.uid,{name:state.user.name,username:state.user.username,
-    hue:state.user.hue,photo:state.user.photo,email:state.user.email}).catch(()=>{});
+  UserSync.push({name:state.user.name,username:state.user.username,
+    hue:state.user.hue,photo:state.user.photo,email:state.user.email});
   save();
   $('#railAva').innerHTML=avatarHTML(state.user.name,myHue(),40,state.user.photo);
   showScreen('s-main');setTab('chats');renderAll();
@@ -1417,10 +1496,10 @@ async function handleGUser(u){
 }
 
 /* ════════════════════════════════════════════════════════════
-   10. CLOUD ORCHESTRATOR — Firebase is the source of truth
+   11. CLOUD ORCHESTRATOR — Firebase is the source of truth
    ════════════════════════════════════════════════════════════ */
 const Cloud={
-  on:false,pres:{},typingMap:{},metaSubs:{},
+  on:false,pres:{},typingMap:{},metaSubs:{},_booting:false,
   friendsSub:null,presSub:null,chatsSub:null,
   storySub:null,callsSub:null,incomingSub:null,_hb:null,_msgSub:null,_typeSub:null,
   chatIdFor(a,b){return [a,b].sort().join('__')},
@@ -1428,25 +1507,41 @@ const Cloud={
   async checkRules(){
     for(let i=0;i<2;i++){
       let r;
-      try{r=await fetch(CLOUD.fb.dbUrl+'/zahra.json?auth='+FB.tok+'&shallow=true')}
+      try{r=await fetchTO(CLOUD.fb.dbUrl+'/zahra.json?auth='+FB.tok+'&shallow=true')}
       catch(e){if(i===0){await new Promise(res=>setTimeout(res,1200));continue}return false}
       if(!(r.status===401||r.status===403))return true;
       if(i===0)await new Promise(res=>setTimeout(res,1200));
     }
     return false},
   async boot(profile){
+    if(this._booting)return true;
+    this._booting=true;
     try{
-      FB.patch('/zahra/users/'+FB.uid,{name:profile.name,username:profile.username,hue:profile.hue,
-        bio:profile.bio||'',photo:profile.photo||'',email:profile.email||'',last:Date.now()}).catch(()=>{});
+      UserSync.push({name:profile.name,username:profile.username,hue:profile.hue,
+        bio:profile.bio||'',photo:profile.photo||'',email:profile.email||''}).catch(()=>{});
       const ok=await this.checkRules();
-      if(!ok){showRulesHelp();return false}
-    }catch(e){toast(t('err_network'),'err');return false}
+      if(!ok){
+        this._booting=false;
+        if(!modalEl)showRulesHelp();
+        return false;
+      }
+    }catch(e){
+      this._booting=false;
+      toast(t('err_network'),'err');return false;
+    }
     this.on=true;
-    await this.ensureCode();
-    await Promise.all([this.syncFriends(),this.syncChats(),this.syncStories(),this.syncCalls()]);
+    try{await this.ensureCode()}catch(e){}
+    await Promise.all([
+      this.syncFriends().catch(()=>{}),
+      this.syncChats().catch(()=>{}),
+      this.syncStories().catch(()=>{}),
+      this.syncCalls().catch(()=>{})
+    ]);
     await Promise.all(state.chats.map(c=>this.fetchMessages(c.id,true).catch(()=>{})));
     this.resubAll();
+    UserSync.flush();
     saveNow();
+    this._booting=false;
     renderAppbar();renderAll();
     return true;
   },
@@ -1481,18 +1576,16 @@ const Cloud={
     };
     beat();clearInterval(this._hb);this._hb=setInterval(beat,30000)},
   async ensureCode(){
-    try{
-      const prof=await FB.get('/zahra/users/'+FB.uid)||{};
-      if(prof.code){state.myCode=prof.code;save();return prof.code}
-      for(let i=0;i<12;i++){
-        const code=genCode();
-        const taken=await FB.get('/zahra/codes/'+code);
-        if(taken&&taken!==FB.uid)continue;
-        await FB.put('/zahra/codes/'+code,FB.uid);
-        await FB.patch('/zahra/users/'+FB.uid,{code:code});
-        state.myCode=code;save();return code;
-      }
-    }catch(e){}
+    const prof=await FB.get('/zahra/users/'+FB.uid)||{};
+    if(prof.code){state.myCode=prof.code;save();return prof.code}
+    for(let i=0;i<12;i++){
+      const code=genCode();
+      const taken=await FB.get('/zahra/codes/'+code);
+      if(taken&&taken!==FB.uid)continue;
+      await FB.put('/zahra/codes/'+code,FB.uid);
+      await FB.patch('/zahra/users/'+FB.uid,{code:code});
+      state.myCode=code;save();return code;
+    }
     return '';
   },
   async syncFriends(){
@@ -1651,35 +1744,28 @@ const Cloud={
     if(!this.on||!curChatId||!FB.tok)return;
     FB.put('/zahra/typing/'+curChatId+'/'+FB.uid,Date.now()).catch(()=>{});
   },
-  /* NEW: instant connect — code match = both sides become friends
-     right away + an automatic greeting message is written so the
-     chat is ready; a reply from the other side lands in real time */
+  /* instant connect: code match → both sides friends + greeting, no delay */
   async connectByCode(code){
     const found=await FB.get('/zahra/codes/'+code);
     if(!found)throw new Error('NOTFOUND');
     if(found===FB.uid)throw new Error('SELF');
-    /* write both friendship edges + chat shells in ONE patch (atomic) */
     const upd={};
     upd['/zahra/friends/'+FB.uid+'/'+found]=true;
     upd['/zahra/friends/'+found+'/'+FB.uid]=true;
     const cid=this.chatIdFor(FB.uid,found);
-    /* members + userChats entries */
     upd['/zahra/userChats/'+FB.uid+'/'+cid]={pinned:false,muted:false,lastRead:0};
     upd['/zahra/userChats/'+found+'/'+cid]={pinned:false,muted:false,lastRead:0};
     await FB.patch('/zahra',upd).catch(async()=>{
-      /* fallback: sequential writes if root patch is blocked */
       await FB.put('/zahra/friends/'+FB.uid+'/'+found,true);
       await FB.put('/zahra/friends/'+found+'/'+FB.uid,true);
       await FB.patch('/zahra/userChats/'+FB.uid+'/'+cid,{pinned:false,muted:false,lastRead:0});
       await FB.patch('/zahra/userChats/'+found+'/'+cid,{pinned:false,muted:false,lastRead:0});
     });
-    /* greeting message so the reply flow starts immediately */
     await this.pushMessage(cid,found,{text:t('greeting')});
-    /* refresh local state instantly (no delay) */
-    await Promise.all([this.syncFriends(),this.syncChats()]);
+    await Promise.all([this.syncFriends(),this.syncChats(),this.fetchMessages(cid,true).catch(()=>{})]);
     return found;
   },
-  /* shared message writer (used by chat send + instant connect) */
+  /* shared message writer (chat send + instant connect greeting) */
   async pushMessage(cid,peerUid,extra){
     const members={};members[FB.uid]=true;members[peerUid]=true;
     const temp={id:'t'+uid(),from:'me',ts:Date.now(),status:'up'};
@@ -1706,7 +1792,7 @@ const Cloud={
         save();
       }catch(e){
         temp.status='up';if(ch)refreshMsg(temp);
-        toast(t('upload_failed'),'err');
+        dbErrToast(e);
       }
     })();
     return temp;
@@ -1727,18 +1813,18 @@ const Cloud={
   },
   async addStoryText(text){
     try{await FB.post('/zahra/stories/'+FB.uid,{type:'text',text:text.slice(0,140),hue:myHue(),ts:Date.now()})}
-    catch(e){toast(t('err_network'),'err');return}
+    catch(e){dbErrToast(e);return}
     toast(t('story_added'));this.syncStories();
   },
   async addStoryImage(file){
     toast(t('live_upload'));
     try{
       let blob=file;
-      if(file.type.indexOf('image/')===0)blob=await compressImage(file,720,0.7);
+      if(file.type.indexOf('image/')===0)blob=await compressImage(file,720,0.62);
       const url=await MEDIA.upload(blob,'story.jpg',blob.type||'image/jpeg');
       await FB.post('/zahra/stories/'+FB.uid,{type:'image',url:url,hue:myHue(),ts:Date.now()});
       toast(t('story_added'));this.syncStories();
-    }catch(e){toast(mediaErrText(e),'err')}
+    }catch(e){dbErrToast(e)}
   },
   async syncCalls(){
     let data=null;try{data=await FB.get('/zahra/userCalls/'+FB.uid)||{}}catch(e){return}
@@ -1755,7 +1841,7 @@ const Cloud={
 function renderNewChatIfOpen(){const ss=$('#ss-newchat');if(ss&&ss.classList.contains('open'))renderNewChat()}
 
 /* ════════════════════════════════════════════════════════════
-   11. NAVIGATION
+   12. NAVIGATION
    ════════════════════════════════════════════════════════════ */
 let curTab='chats',curChatId=null;
 function showScreen(id){$$('.screen').forEach(s=>s.classList.toggle('active',s.id===id));window.scrollTo(0,0)}
@@ -1819,14 +1905,16 @@ function renderAll(){
 }
 
 /* ════════════════════════════════════════════════════════════
-   12. APPBAR / INBOX / STORIES
+   13. APPBAR / INBOX / STORIES (messenger-style viewer)
    ════════════════════════════════════════════════════════════ */
 function renderAppbar(){
   const box=$('#appbarBox');box.innerHTML='';
   if(curTab==='chats'){
     const h=el('h1');const mk=el('span');mk.innerHTML=zahraMark(27);mk.style.display='inline-flex';
     h.appendChild(mk);h.appendChild(document.createTextNode('Zahra'));
-    const pill=el('span','live-pill');pill.innerHTML='<i></i>';pill.appendChild(document.createTextNode(t('live')));
+    const pill=el('span','live-pill'+(Cloud.on?'':' warn'));
+    pill.innerHTML='<i></i>';
+    pill.appendChild(document.createTextNode(Cloud.on?t('live'):t('connecting_state')));
     pill.style.fontSize='9.5px';pill.style.padding='3px 8px';
     h.appendChild(pill);box.appendChild(h);
     box.appendChild(el('div','spacer'));
@@ -1930,7 +2018,8 @@ function pickStoryImage(){
   };
   fi.value='';fi.accept='image/*';fi.click();
 }
-let storyTimer=null;
+let storyTimer=null,storyState=null;
+/* messenger-style viewer: tap left = prev, right = next, X = close */
 function openStoryViewer(contactUid){
   const list=state.stories.filter(s=>s.contactId===contactUid);
   if(!list.length)return;
@@ -1939,35 +2028,54 @@ function openStoryViewer(contactUid){
   for(let i=0;i<list.length;i++){if(state.viewed.indexOf(list[i].key)<0){idx=i;break}}
   const lb=$('#lightbox');lb.classList.add('open');
   const m=$('#lbMedia');m.innerHTML='';
-  const card=el('div');card.style.cssText='width:min(420px,88vw);aspect-ratio:9/14;border-radius:22px;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;color:#fff;text-align:center;font-size:22px;font-weight:700;padding:26px';
-  const bar=el('div');bar.style.cssText='position:absolute;top:10px;left:12px;right:12px;height:3.5px;border-radius:4px;background:rgba(255,255,255,.3);overflow:hidden;z-index:2';
-  const fill=el('div');fill.style.cssText='height:100%;width:0;background:#fff';bar.appendChild(fill);card.appendChild(bar);
-  const who=el('b');who.style.cssText='position:absolute;top:22px;left:14px;font-size:13px;text-shadow:0 1px 4px rgba(0,0,0,.4);z-index:2';
-  who.textContent=contactUid===FB.uid?t('my_story'):(ct?ct.name:'');card.appendChild(who);
+  const v=el('div','storyv');
+  const zones=el('div');
+  const zl=el('button','svzone l');zl.setAttribute('aria-label','Previous');
+  const zr=el('button','svzone r');zr.setAttribute('aria-label','Next');
+  zones.appendChild(zl);zones.appendChild(zr);v.appendChild(zones);
+  const bar=el('div','svbar');const fill=el('div','svfill');bar.appendChild(fill);v.appendChild(bar);
+  const who=el('b','svwho');v.appendChild(who);
+  const when=el('span','svtime');v.appendChild(when);
+  const dots=el('div','svnavdots');v.appendChild(dots);
+  const media=el('div');v.appendChild(media);
+  m.appendChild(v);
+  function paintDots(){
+    dots.innerHTML='';
+    list.forEach((s,i)=>{const d=el('i');if(i===idx)d.classList.add('on');dots.appendChild(d)});
+  }
   function show(){
-    const s=list[idx];if(!s){lb.classList.remove('open');return}
+    const s=list[idx];
+    if(!s){closeViewer();return}
+    who.textContent=contactUid===FB.uid?t('my_story'):(ct?ct.name:'');
+    when.textContent=fmtListTime(s.ts||Date.now());
+    paintDots();
+    media.innerHTML='';
     if(s.type==='image'&&s.url){
-      card.style.background='#111';
-      card.innerHTML='';card.appendChild(bar);card.appendChild(who);
-      const im=el('img');im.src=s.url;im.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:cover';card.appendChild(im);
+      const im=el('img','svmedia');im.src=s.url;im.alt=t('photo');media.appendChild(im);
     }else{
       const h2=(s.hue+45)%360;
-      card.style.background='linear-gradient(150deg,hsl('+s.hue+' 70% 55%),hsl('+h2+' 70% 40%))';
-      card.innerHTML='';card.appendChild(bar);card.appendChild(who);
-      card.appendChild(document.createTextNode(s.text||''));
+      const wrap=el('div');wrap.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(150deg,hsl('+s.hue+' 70% 55%),hsl('+h2+' 70% 40%))';
+      wrap.appendChild(el('div','svtext',s.text||''));
+      media.appendChild(wrap);
     }
     if(state.viewed.indexOf(s.key)<0){state.viewed.push(s.key);save()}
-    const dur=REDUCED?10:4200;
+    const dur=REDUCED?10:5000;
     fill.style.transition='none';fill.style.width='0';
     requestAnimationFrame(()=>{fill.style.transition='width '+dur+'ms linear';fill.style.width='100%'});
-    clearTimeout(storyTimer);storyTimer=setTimeout(()=>{idx++;show()},dur);
+    clearTimeout(storyTimer);storyTimer=setTimeout(next,dur);
   }
-  m.appendChild(card);show();
-  lb.onclick=e=>{if(e.target===lb){clearTimeout(storyTimer);lb.classList.remove('open')}};
+  function next(){idx++;if(idx>=list.length){closeViewer();return}show()}
+  function prev(){if(idx>0){idx--;show()}}
+  function closeViewer(){clearTimeout(storyTimer);lb.classList.remove('open')}
+  storyState={next:next,prev:prev,close:closeViewer};
+  zl.onclick=e=>{e.stopPropagation();prev()};
+  zr.onclick=e=>{e.stopPropagation();next()};
+  lb.onclick=e=>{if(e.target===lb)closeViewer()};
+  show();
 }
 
 /* ════════════════════════════════════════════════════════════
-   13. CALLS SCREEN
+   14. CALLS SCREEN
    ════════════════════════════════════════════════════════════ */
 function renderCalls(){
   const box=$('#callFilters');box.innerHTML='';
@@ -1997,7 +2105,7 @@ function renderCalls(){
 }
 
 /* ════════════════════════════════════════════════════════════
-   14. FRIENDS / CONTACTS — instant connect by unique code
+   15. FRIENDS / CONTACTS — instant connect by unique code
    ════════════════════════════════════════════════════════════ */
 function renderContacts(q){
   const list=$('#contactList');list.innerHTML='';
@@ -2038,7 +2146,6 @@ function openMyCode(){
     body.appendChild(cp);
   });
 }
-/* instant connect: code match → friends immediately + greeting message */
 function openAddFriend(){
   openSheet(t('add_friend'),(body,close)=>{
     body.appendChild(el('p',null,t('add_friend_h'))).style.cssText='font-size:13px;color:var(--text2);margin:0 4px 10px';
@@ -2053,33 +2160,23 @@ function openAddFriend(){
       if(!code){toast(t('err_required'),'err');return}
       if(code===state.myCode){toast(t('self_code'),'err');return}
       find.disabled=true;res.innerHTML='';
-      const spin=el('div','spinner');spin.style.margin='14px auto 4px';
-      res.appendChild(spin);
+      const st=el('div','connect-status');
+      const sp=el('span','spinner');sp.style.margin='0';
+      st.appendChild(sp);st.appendChild(document.createTextNode(t('connecting_now')));
+      res.appendChild(st);
       try{
         const peerUid=await Cloud.connectByCode(code);
-        const prof=await FB.get('/zahra/users/'+peerUid)||{};
         res.innerHTML='';
-        const ok=el('div','card');ok.style.cssText='display:flex;align-items:center;gap:12px;padding:14px;border-color:rgba(34,197,94,.4)';
-        ok.innerHTML='<span class="ava" style="display:inline-block">'+avatarHTML(prof.name||'User',(prof.hue!=null)?prof.hue:220,52,prof.photo||'')+'</span>';
-        const pd=el('div');pd.style.flex='1';
-        const nb=el('b',null,prof.name||'User');nb.style.cssText='font-size:15px;font-weight:700;display:block';pd.appendChild(nb);
-        const sub=el('div',null,t('friend_connected').split('{n}').join(prof.name||'User'));sub.style.cssText='font-size:12px;color:var(--ok);font-weight:700';pd.appendChild(sub);
-        ok.appendChild(pd);
-        const open=el('button','btn primary',t('message'));
-        open.onclick=()=>{closeSub('ss-privacy');close();
-          const cid=Cloud.chatIdFor(FB.uid,peerUid);
-          openChat(cid);
-        };
-        ok.appendChild(open);
-        res.appendChild(ok);
-        toast(tf('friend_connected',{n:prof.name||'User'}));
-        renderContacts('');
+        toast(t('friend_connected').split('{n}').join(''));
+        close();
+        setTab('chats');
+        openChat(Cloud.chatIdFor(FB.uid,peerUid));
       }catch(e){
         res.innerHTML='';
         const m=String(e&&e.message||'');
         if(m.indexOf('SELF')>=0)toast(t('self_code'),'err');
         else if(m.indexOf('NOTFOUND')>=0)toast(t('not_found_code'),'err');
-        else toast(t('err_network'),'err');
+        else dbErrToast(e);
       }
       find.disabled=false;
     }
@@ -2156,7 +2253,7 @@ function showRulesHelp(){
 }
 
 /* ════════════════════════════════════════════════════════════
-   15. CONVERSATION
+   16. CONVERSATION
    ════════════════════════════════════════════════════════════ */
 let replyTarget=null;
 function renderConvHead(){
@@ -2327,7 +2424,10 @@ function sendCloud(ch,fields,file,fname,ctype){
       await FB.patch('/zahra/chats/'+ch.id,{members:ch._members||{},lastText:metaTextFor(temp).slice(0,80),lastTs:temp.ts,lastFrom:FB.uid,lastKind:temp.kind||''});
       FB.put('/zahra/typing/'+ch.id+'/'+FB.uid,null).catch(()=>{});
       save();
-    }catch(e){toast(mediaErrText(e),'err')}
+    }catch(e){
+      temp.status='up';refreshMsg(temp);
+      dbErrToast(e);
+    }
   })();
 }
 function sendMessage(){
@@ -2343,7 +2443,7 @@ function autoGrow(){const i=$('#msgInput');i.style.height='auto';i.style.height=
 function setTrig(sendMode){$('#trig').classList.toggle('mode-send',sendMode)}
 
 /* ════════════════════════════════════════════════════════════
-   16. VOICE — real MediaRecorder + in-Firebase storage
+   17. VOICE — real MediaRecorder + in-Firebase storage
    ════════════════════════════════════════════════════════════ */
 let rec=null,recStream=null,recChunks=[],recT0=0,recTimer=null,recSendFlag=false,playing=null;
 function pickMime(){const list=['audio/webm;codecs=opus','audio/webm','audio/mp4'];
@@ -2404,7 +2504,7 @@ function toggleVoice(msg,rowEl){
 }
 
 /* ════════════════════════════════════════════════════════════
-   17. ATTACHMENTS / LIGHTBOX / GALLERY
+   18. ATTACHMENTS / LIGHTBOX / GALLERY
    ════════════════════════════════════════════════════════════ */
 function openAttachSheet(){
   openSheet(t('attach_title'),(body,close)=>{
@@ -2431,7 +2531,7 @@ function pickFile(accept){
       const ch=chatById(curChatId);
       if(ch)sendCloud(ch,{kind:'file',fname:f.name,fsize:f.size},f,f.name,f.type||'application/octet-stream');
       return}
-    if(kind==='file'){toast(t('file_type')||'',"err");return}
+    if(kind==='file'){toast(t('file_type')||'','err');return}
     const url=URL.createObjectURL(f);
     openModal((m,close)=>{
       m.appendChild(el('h3',null,t('preview_title')));
@@ -2456,6 +2556,7 @@ function openLightbox(msg){
   if(msg.kind==='video'){const vd=el('video');vd.src=msg.url;vd.controls=true;m.appendChild(vd)}
   else{const im=el('img');im.src=msg.url;m.appendChild(im)}
   lb.classList.add('open');
+  lb.onclick=e=>{if(e.target===lb)lb.classList.remove('open')};
 }
 let mediaTab='photos';
 function openMedia(){
@@ -2501,7 +2602,7 @@ function renderMediaTabs(){
 }
 
 /* ════════════════════════════════════════════════════════════
-   18. REAL CALLS — WebRTC with Firebase RTDB signaling
+   19. REAL CALLS — WebRTC with Firebase RTDB signaling
    ════════════════════════════════════════════════════════════ */
 const RTC={
   pc:null,callId:null,peer:null,peerName:'',peerPhoto:'',kind:'voice',role:null,
@@ -2725,7 +2826,7 @@ const RTC={
 };
 
 /* ════════════════════════════════════════════════════════════
-   19. SETTINGS / PROFILE (with photo) / PRIVACY / ABOUT
+   20. SETTINGS / PROFILE (with photo) / PRIVACY / ABOUT
    ════════════════════════════════════════════════════════════ */
 function renderSettings(){
   const box=$('#settingsBox');box.innerHTML='';
@@ -2932,7 +3033,8 @@ function pickProfilePhoto(after){
       const small=await compressImage(f,256,0.8);
       const url=await MEDIA.upload(small,'profile.jpg','image/jpeg');
       state.user.photo=url;save();
-      if(Cloud.on)FB.patch('/zahra/users/'+FB.uid,{photo:url}).catch(()=>{});
+      /* always attempts Firebase — queued+retried if network is down */
+      UserSync.push({photo:url}).catch(()=>{});
       $('#railAva').innerHTML=avatarHTML(state.user.name,myHue(),40,state.user.photo);
       toast(t('profile_saved'));
       renderAll();
@@ -2978,9 +3080,9 @@ function openProfileEditor(){
       const nm=nameI.value.trim();if(!nm){err.textContent=t('err_required');return}
       state.user={name:nm,username:state.user.username,bio:bioI.value.trim().slice(0,120),hue:hue,
         photo:state.user.photo||'',email:state.user.email};
-      /* FIX: name is written to Firebase immediately — it now survives
-         leaving the site, new devices, and any local cache loss */
-      if(Cloud.on)FB.patch('/zahra/users/'+FB.uid,{name:nm,bio:state.user.bio,hue:hue}).catch(()=>{});
+      /* FIX: name always written to Firebase (queued+retried) —
+         survives leaving the site, any device, any cache loss */
+      UserSync.push({name:nm,bio:state.user.bio,hue:hue}).catch(()=>{});
       save();close();renderAll();$('#railAva').innerHTML=avatarHTML(nm,hue,40,state.user.photo);toast(t('profile_saved'))};
     m.appendChild(f);setTimeout(()=>nameI.focus(),120);
   });
@@ -3036,7 +3138,7 @@ function syncLangUI(){
 }
 
 /* ════════════════════════════════════════════════════════════
-   20. SEARCH & NEW CHAT
+   21. SEARCH & NEW CHAT
    ════════════════════════════════════════════════════════════ */
 function renderSearch(q){
   const box=$('#searchBody');box.innerHTML='';
@@ -3099,7 +3201,7 @@ function renderNewChat(){
 }
 
 /* ════════════════════════════════════════════════════════════
-   21. AUTH — real Firebase (email + Google)
+   22. AUTH — real Firebase (email + Google)
    ════════════════════════════════════════════════════════════ */
 async function doLogin(e){
   e.preventDefault();
@@ -3133,7 +3235,7 @@ async function doSignup(e){
     const j=await FB.signUp(email,pass,name);
     state.user={name:name,username:email.split('@')[0].replace(/[^a-z0-9_]/g,'')||'user',bio:'',
       hue:Math.floor(Math.random()*360),photo:'',email:email};
-    FB.patch('/zahra/users/'+FB.uid,{name:name,username:state.user.username,hue:state.user.hue,bio:'',photo:'',email:email}).catch(()=>{});
+    UserSync.push({name:name,username:state.user.username,hue:state.user.hue,bio:'',photo:'',email:email}).catch(()=>{});
     setBusy($('#su-btn'),false);
     save();afterAuth(t('toast_account_created'));
     Cloud.boot(state.user);
@@ -3152,7 +3254,7 @@ function afterAuth(msg){
 }
 
 /* ════════════════════════════════════════════════════════════
-   22. EVENTS + INIT
+   23. EVENTS + INIT
    ════════════════════════════════════════════════════════════ */
 const actions={
   nav:b=>showScreen(b.dataset.to),
@@ -3202,7 +3304,7 @@ const actions={
   'mic-send':()=>stopRec(false),
   'send-msg':()=>sendMessage(),
   'jump-bottom':()=>scrollBottom(true),
-  'lb-close':()=>$('#lightbox').classList.remove('open')
+  'lb-close':()=>{if(storyState&&$('#lightbox').classList.contains('open')){storyState.close();storyState=null}else $('#lightbox').classList.remove('open')}
 };
 document.addEventListener('click',e=>{
   const b=e.target.closest('[data-action]');
@@ -3293,7 +3395,9 @@ if(window.visualViewport){
 window.addEventListener('popstate',()=>{
   if(modalEl){closeModal();return}
   if(sheetEl){closeSheet();return}
-  if($('#lightbox').classList.contains('open')){$('#lightbox').classList.remove('open');return}
+  if($('#lightbox').classList.contains('open')){
+    if(storyState){storyState.close();storyState=null}else $('#lightbox').classList.remove('open');
+    return}
   if(RTC.state!=='idle'){
     if(RTC.state==='incoming')RTC.decline();else RTC.hangup();
     return}
@@ -3307,7 +3411,12 @@ function flushOnLeave(){
   }
 }
 window.addEventListener('pagehide',flushOnLeave);
-document.addEventListener('visibilitychange',()=>{if(document.hidden)flushOnLeave()});
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){
+    flushOnLeave();
+    if(state&&state.user)UserSync.flush();
+  }
+});
 (async function init(){
   loadState();
   document.documentElement.dataset.theme=state.theme;
@@ -3356,6 +3465,13 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)flushOnLeav
       if(res&&res.user)handleGUser(res.user);
     }).catch(()=>{});
   }
+  /* FIX: keep retrying cloud boot in the background until it connects —
+     name/photo/friends/stories all recover automatically */
+  setInterval(()=>{
+    if(state&&state.user&&!Cloud.on&&!Cloud._booting&&FB.tok){
+      Cloud.boot(state.user);
+    }
+  },10000);
 })();
 </script>
 </body>
