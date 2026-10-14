@@ -253,8 +253,6 @@ svg{display:block}
 .fr-top{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 6px 6px}
 .code-big{font-size:28px;font-weight:800;letter-spacing:.16em;text-align:center;background:var(--accent-soft);
   border:1.5px dashed rgba(99,102,241,.45);border-radius:14px;padding:15px 10px;margin:10px 0 4px;user-select:all;color:var(--accent)}
-.reqbtns{display:flex;gap:8px;flex:none}
-.reqbtns .btn{font-size:12.5px;padding:8px 14px}
 .rules-code{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px;
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.55;
   overflow-x:auto;white-space:pre;user-select:all;margin-bottom:16px;color:var(--text)}
@@ -753,25 +751,19 @@ svg{display:block}
 'use strict';
 /* ════════════════════════════════════════════════════════════
    1. CONFIG — 100% FREE STACK, NO demo data
-   Accounts  → Firebase Auth (email + real Google sign-in)
-   Chats etc → Firebase RTDB (free Spark plan, SSE live)
-   Media     → INSIDE Firebase too (compressed base64 data URLs)
-   OPTIONAL bigger files: free Cloudinary unsigned preset below.
+   Accounts → Firebase Auth · Chats/presence/etc → Firebase RTDB
+   Media → inside Firebase (compressed base64) or optional Cloudinary
+   Calls → real WebRTC (RTDB signaling + Google STUN)
 
-   Firebase setup (only requirement):
-   RTDB rules → Publish:
+   v3.5.0 CHANGES (per request):
+   • Friend system is now INSTANT: entering a valid unique code adds
+     both sides as friends immediately (no request/accept flow), with
+     an automatic greeting message so the chat opens ready to reply.
+   • Profile edits (name/photo) are written to Firebase immediately
+     and the server profile is the source of truth on every boot.
+   Required RTDB rules (Publish):
    { "rules": { "zahra": { ".read":"auth != null", ".write":"auth != null" } } }
-   Google login: Authentication → Sign-in method → enable Google;
-   add your site domain under Authentication → Settings →
-   Authorized domains.
-
-   v3.4.1 FIX (data disappearing after leaving the site):
-   Firebase is now the SINGLE SOURCE OF TRUTH. On every re-entry the
-   app fully rebuilds profile + friends + chats + ALL messages from
-   Firebase (local cache is only an instant-paint helper). The user
-   object itself is rebuilt from /zahra/users/{uid} even if local
-   prefs were lost, and pending saves are flushed the moment the tab
-   is hidden/closed.
+   Google login: enable Google provider + add domain to Authorized domains.
 */
 const CLOUD = {
   fb: {
@@ -786,7 +778,7 @@ const CLOUD = {
     uploadPreset: ''
   }
 };
-const PROD_CONFIG = { appName:'Zahra', version:'3.4.1' };
+const PROD_CONFIG = { appName:'Zahra', version:'3.5.0' };
 const REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const MEDIA_MAX_VIDEO_MB = 5;
 const MEDIA_MAX_RAW_MB   = 5;
@@ -847,16 +839,14 @@ en:{
   blocked_toast:'{n} blocked',unblocked_toast:'{n} unblocked',contacts_search:'Search friends…',
   my_code:'My friend code',my_code_h:'Share this code — friends add you with it',
   code_copied:'Friend code copied',
-  add_friend:'Add friend',add_friend_h:"Enter your friend's 6-character code",code_ph:'e.g. K7M3PX',
-  find:'Find',send_request:'Send request',request_sent:'Friend request sent',
-  requests:'Friend requests',accept:'Accept',decline:'Decline',
-  friend_now:'You and {n} are now friends',
+  add_friend:'Add friend',add_friend_h:"Enter your friend's 6-character code — you'll be connected instantly",code_ph:'e.g. K7M3PX',
+  find:'Connect',friend_connected:'You and {n} are now friends!',
+  greeting:'👋 Hi! We are connected on Zahra now.',
   self_code:"That's your own code",already_friend:'Already in your friends',
   not_found_code:'No Zahra user found for this code',
-  no_friends_t:'No friends yet',no_friends_h:'Tap "Add friend" and enter a friend\'s unique code.',
+  no_friends_t:'No friends yet',no_friends_h:'Tap "Add friend" and enter a friend\'s unique code — connection is instant.',
   remove_friend:'Remove friend',remove_fr_t:'Remove friend?',
   remove_fr_b:'{n} will be removed from your friends. Your chat will stay.',
-  new_request:'New friend request',
   rules_title:'One setup step left',
   rules_body:'Firebase Realtime Database rules are blocking Zahra.\n\n1. Open Firebase Console → Realtime Database → Rules\n2. Replace with the JSON below and click Publish',
   rules_copy:'Copy rules',rules_retry:'Retry',
@@ -891,11 +881,11 @@ en:{
   sec_contacts:'Friends',no_results_t:'No results',no_results_h:'Try a different search term.',
   newchat_title:'New conversation',newchat_hint:'Start a chat with one of your friends',
   about_title:'About',version_label:'Version',
-  about_p:'Zahra is a premium messaging app — real-time messaging via Firebase, media inside the free Firebase tier, real WebRTC calls, Google sign-in, and friends added by unique code. 100% free to run. Your data lives in Firebase and follows you to any device.',
+  about_p:'Zahra is a premium messaging app — real-time messaging via Firebase, media inside the free Firebase tier, real WebRTC calls, Google sign-in, and instant friend connection by unique code. 100% free to run.',
   features_title:'Highlights',feat_chat:'Real-time messaging (Firebase)',feat_calls:'Real voice & video calls (WebRTC)',
   feat_media:'Photos, videos & voice notes (free tier)',feat_private:'Private — friends by unique code only',feat_lang:'English & বাংলা',
   infra_title:'Cost & setup',
-  infra_p:'This app runs entirely on the FREE Firebase Spark plan — no card needed.\n• Auth: free · RTDB: 1 GB stored, 10 GB/month download.\n• Photos are auto-compressed (1280px), voice notes are small; video is capped at 5 MB in free mode.\n• Your data lives in Firebase: sign in from any device and everything comes back.\n• For larger files, add a free Cloudinary unsigned preset in CLOUD.media.\n• Only setup: RTDB rules allow signed-in users on /zahra; enable Google provider + authorized domain for Google login.',
+  infra_p:'This app runs entirely on the FREE Firebase Spark plan — no card needed.\n• Auth: free · RTDB: 1 GB stored, 10 GB/month download.\n• Photos are auto-compressed, voice notes are small; video is capped at 5 MB.\n• Friends connect instantly when you enter their unique code.\n• For larger files, add a free Cloudinary unsigned preset in CLOUD.media.\n• Only setup: RTDB rules allow signed-in users on /zahra; enable Google provider + authorized domain for Google login.',
   about_rights:'Made with care · Zahra',
   empty_chats_t:'No conversations',empty_chats_h:'Add a friend with their code, then tap compose.',
   empty_calls_t:'No calls yet',empty_calls_h:'Your real call history will appear here.',
@@ -903,7 +893,7 @@ en:{
   starred_title:'Starred Messages',empty_starred_t:'No starred messages',empty_starred_h:'Long-press a message and choose Star.',
   cancel:'Cancel',save:'Save',close:'Close',confirm:'Confirm',
   view_contact:'View friend',
-  help_text:'Zahra — real-time, 100% free mode.\n\n• Your data lives in Firebase — sign in from ANY device and friends, chats, messages and stories come back automatically.\n• Accounts: email/password or real Google sign-in.\n• Friends are added ONLY by unique 6-character code.\n• Media lives inside Firebase (free tier): photos auto-compressed, video max 5 MB.\n• Required DB rules: {"rules":{"zahra":{".read":"auth != null",".write":"auth != null"}}}\n• Google login: enable Google provider + add your domain to Authorized domains.\n• Bigger files? Add a free Cloudinary unsigned preset in CLOUD.media.\n• Calls are real WebRTC; strict NATs may need TURN.'
+  help_text:'Zahra — real-time, 100% free mode.\n\n• Friends connect INSTANTLY: enter their unique 6-character code and you are both connected right away, with an automatic greeting in the chat.\n• Your data lives in Firebase — sign in from ANY device and everything comes back.\n• Profile name & photo save to Firebase immediately.\n• Required DB rules: {"rules":{"zahra":{".read":"auth != null",".write":"auth != null"}}}\n• Google login: enable Google provider + add your domain to Authorized domains.\n• Bigger files? Add a free Cloudinary unsigned preset in CLOUD.media.\n• Calls are real WebRTC; strict NATs may need TURN.'
 },
 bn:{
   tagline:'শুধু চ্যাট নয়, তার বেশি',connect:'সংযোগ',chat:'চ্যাট',share:'শেয়ার',loading:'লোড হচ্ছে…',
@@ -957,16 +947,14 @@ bn:{
   blocked_toast:'{n} ব্লক করা হয়েছে',unblocked_toast:'{n} আনব্লক হয়েছে',contacts_search:'বন্ধু খুঁজুন…',
   my_code:'আমার বন্ধু কোড',my_code_h:'এই কোড শেয়ার করুন — বন্ধুরা এটা দিয়ে আপনাকে যোগ করবে',
   code_copied:'বন্ধু কোড কপি হয়েছে',
-  add_friend:'বন্ধু যোগ করুন',add_friend_h:'বন্ধুর ৬ অক্ষরের কোড লিখুন',code_ph:'যেমন K7M3PX',
-  find:'খুঁজুন',send_request:'রিকোয়েস্ট পাঠান',request_sent:'বন্ধুত্বের রিকোয়েস্ট পাঠানো হয়েছে',
-  requests:'বন্ধুত্বের রিকোয়েস্ট',accept:'গ্রহণ',decline:'বাতিল',
-  friend_now:'আপনি ও {n} এখন বন্ধু',
+  add_friend:'বন্ধু যোগ করুন',add_friend_h:'বন্ধুর ৬ অক্ষরের কোড লিখুন — সাথে সাথেই সংযোগ হবে',code_ph:'যেমন K7M3PX',
+  find:'সংযোগ করুন',friend_connected:'আপনি ও {n} এখন বন্ধু!',
+  greeting:'👋 হাই! আমরা এখন Zahra-তে সংযুক্ত।',
   self_code:'এটি আপনার নিজের কোড',already_friend:'ইতিমধ্যে আপনার বন্ধু',
   not_found_code:'এই কোডে কোনো Zahra ব্যবহারকারী পাওয়া যায়নি',
-  no_friends_t:'এখনও কোনো বন্ধু নেই',no_friends_h:'"বন্ধু যোগ করুন" ট্যাপ করে বন্ধুর ইউনিক কোড দিন।',
+  no_friends_t:'এখনও কোনো বন্ধু নেই',no_friends_h:'"বন্ধু যোগ করুন" ট্যাপ করে বন্ধুর ইউনিক কোড দিন — সংযোগ সাথে সাথেই হবে।',
   remove_friend:'বন্ধু সরান',remove_fr_t:'বন্ধু সরাবেন?',
   remove_fr_b:'{n} আপনার বন্ধু তালিকা থেকে সরে যাবে। চ্যাট থাকবে।',
-  new_request:'নতুন বন্ধুত্বের রিকোয়েস্ট',
   rules_title:'শুধু একটি সেটআপ বাকি',
   rules_body:'Firebase Realtime Database rules Zahra-কে আটকাচ্ছে।\n\n১. Firebase Console → Realtime Database → Rules খুলুন\n২. নিচের JSON বসিয়ে Publish চাপুন',
   rules_copy:'Rules কপি করুন',rules_retry:'আবার চেষ্টা করুন',
@@ -1001,11 +989,11 @@ bn:{
   sec_contacts:'বন্ধু',no_results_t:'কোনো ফলাফল নেই',no_results_h:'অন্য কিছু লিখে খুঁজুন।',
   newchat_title:'নতুন কথোপকথন',newchat_hint:'আপনার বন্ধুদের সাথে চ্যাট শুরু করুন',
   about_title:'সম্পর্কে',version_label:'সংস্করণ',
-  about_p:'Zahra একটি প্রিমিয়াম মেসেজিং অ্যাপ — রিয়েল-টাইম মেসেজিং Firebase-এ, মিডিয়া ফ্রি Firebase টিয়ারের ভেতরে, আসল WebRTC কল, Google সাইন-ইন এবং ইউনিক কোড দিয়ে বন্ধু যোগ। চালাতে ১০০% ফ্রি। আপনার ডেটা Firebase-এ থাকে — যেকোনো ডিভাইস থেকে সাইন ইন করলেই ফিরে আসে।',
+  about_p:'Zahra একটি প্রিমিয়াম মেসেজিং অ্যাপ — রিয়েল-টাইম মেসেজিং Firebase-এ, মিডিয়া ফ্রি Firebase টিয়ারের ভেতরে, আসল WebRTC কল, Google সাইন-ইন এবং ইউনিক কোড দিয়ে তাৎক্ষণিক বন্ধু সংযোগ। চালাতে ১০০% ফ্রি।',
   features_title:'বিশেষত্ব',feat_chat:'রিয়েল-টাইম মেসেজিং (Firebase)',feat_calls:'আসল ভয়েস ও ভিডিও কল (WebRTC)',
   feat_media:'ছবি, ভিডিও ও ভয়েস নোট (ফ্রি টিয়ার)',feat_private:'প্রাইভেট — শুধু কোড দিয়েই বন্ধু',feat_lang:'English ও বাংলা',
   infra_title:'খরচ ও সেটআপ',
-  infra_p:'এই অ্যাপ সম্পূর্ণ ফ্রি Firebase Spark প্ল্যানে চলে — কার্ড লাগে না।\n• Auth ফ্রি · RTDB: ১ জিবি স্টোর, মাসে ১০ জিবি ডাউনলোড।\n• ছবি auto-compress হয় (১২৮০px), ভয়েস ছোট; ফ্রি মোডে ভিডিও সর্বোচ্চ ৫ MB।\n• আপনার ডেটা Firebase-এ থাকে: যেকোনো ডিভাইসে সাইন ইন করলেই সব ফিরে আসে।\n• বড় ফাইলের জন্য CLOUD.media-তে ফ্রি Cloudinary unsigned preset দিন।\n• একমাত্র সেটআপ: RTDB rules সাইন-ইন ইউজারদের অনুমতি দিন; Google লগইনের জন্য provider চালু + ডোমেইন যোগ করুন।',
+  infra_p:'এই অ্যাপ সম্পূর্ণ ফ্রি Firebase Spark প্ল্যানে চলে — কার্ড লাগে না।\n• Auth ফ্রি · RTDB: ১ জিবি স্টোর, মাসে ১০ জিবি ডাউনলোড।\n• ছবি auto-compress হয়; ভিডিও সর্বোচ্চ ৫ MB।\n• ইউনিক কোড দিলেই বন্ধু সংযোগ তাৎক্ষণিক হয়।\n• বড় ফাইলের জন্য CLOUD.media-তে ফ্রি Cloudinary unsigned preset দিন।\n• একমাত্র সেটআপ: RTDB rules সাইন-ইন ইউজারদের অনুমতি দিন; Google লগইনের জন্য provider চালু + ডোমেইন যোগ করুন।',
   about_rights:'যত্ন সহকারে তৈরি · Zahra',
   empty_chats_t:'কোনো কথোপকথন নেই',empty_chats_h:'বন্ধুর কোড দিয়ে যোগ করুন, তারপর কম্পোজ ট্যাপ করুন।',
   empty_calls_t:'এখনও কোনো কল নেই',empty_calls_h:'আপনার আসল কল হিস্টোরি এখানে দেখা যাবে।',
@@ -1013,7 +1001,7 @@ bn:{
   starred_title:'স্টার করা বার্তা',empty_starred_t:'কোনো স্টার করা বার্তা নেই',empty_starred_h:'কোনো বার্তায় লম্বা চাপ দিয়ে Star বেছে নিন।',
   cancel:'বাতিল',save:'সেভ',close:'বন্ধ করুন',confirm:'নিশ্চিত করুন',
   view_contact:'বন্ধু দেখুন',
-  help_text:'Zahra — রিয়েল-টাইম, ১০০% ফ্রি মোড।\n\n• আপনার ডেটা Firebase-এ থাকে — যেকোনো ডিভাইসে সাইন ইন করলেই বন্ধু, চ্যাট, বার্তা ও স্টোরি স্বয়ংক্রিয়ভাবে ফিরে আসে।\n• অ্যাকাউন্ট: ইমেইল/পাসওয়ার্ড বা আসল Google সাইন-ইন।\n• বন্ধু যোগ হয় শুধুই ৬ অক্ষরের ইউনিক কোড দিয়ে।\n• মিডিয়া Firebase-এর ভেতরে (ফ্রি টিয়ার): ছবি auto-compress, ভিডিও সর্বোচ্চ ৫ MB।\n• দরকারি DB rules: {"rules":{"zahra":{".read":"auth != null",".write":"auth != null"}}}\n• Google লগইন: Google provider চালু + Authorized domains-এ ডোমেইন যোগ।\n• বড় ফাইল? CLOUD.media-তে ফ্রি Cloudinary unsigned preset দিন।\n• কল আসল WebRTC; কঠোর NAT-এ TURN লাগতে পারে।'
+  help_text:'Zahra — রিয়েল-টাইম, ১০০% ফ্রি মোড।\n\n• বন্ধু সংযোগ তাৎক্ষণিক: ৬ অক্ষরের ইউনিক কোড দিলেই দুই পক্ষ সাথে সাথে বন্ধু হয়ে যায়, চ্যাটে স্বয়ংক্রিয় গ্রিটিং আসে।\n• আপনার ডেটা Firebase-এ থাকে — যেকোনো ডিভাইসে সাইন ইন করলেই সব ফিরে আসে।\n• প্রোফাইল নাম ও ছবি সাথে সাথে Firebase-এ সেভ হয়।\n• দরকারি DB rules: {"rules":{"zahra":{".read":"auth != null",".write":"auth != null"}}}\n• Google লগইন: Google provider চালু + Authorized domains-এ ডোমেইন যোগ।\n• বড় ফাইল? CLOUD.media-তে ফ্রি Cloudinary unsigned preset দিন।\n• কল আসল WebRTC; কঠোর NAT-এ TURN লাগতে পারে।'
 }};
 function tf(k,vars){var s=(I18N[state.lang]&&I18N[state.lang][k])||I18N.en[k]||k;
   if(vars){for(var v in vars){s=s.split('{'+v+'}').join(vars[v])}}
@@ -1147,13 +1135,13 @@ function waveSVG(){
 function genBars(n){const b=[];for(let i=0;i<n;i++){const v=Math.abs(Math.sin(i*1.7)+0.55*Math.sin(i*0.63+2));b.push(Math.round(8+Math.min(1,v/1.4)*18));}return b}
 
 /* ════════════════════════════════════════════════════════════
-   5. STATE — starts EMPTY; everything real comes from Firebase
+   5. STATE
    ════════════════════════════════════════════════════════════ */
 let state=null;
 function defaults(){return {
   lang:'en',theme:'light',user:null,myCode:'',
   settings:{notifications:true,readReceipts:true,onlineStatus:true,mediaPreview:true,enterToSend:true,wallpaper:'soft'},
-  contacts:[],requests:[],chats:[],calls:[],stories:[],viewed:[],callsFilter:'all'}}
+  contacts:[],chats:[],calls:[],stories:[],viewed:[],callsFilter:'all'}}
 function loadState(){
   state=Object.assign(defaults(),store.get(KEY+'_prefs',{}));
   const c=store.get(KEY+'_cache',null);
@@ -1162,11 +1150,9 @@ function loadState(){
       ch.messages=(ch.messages||[]).filter(m=>m.status!=='up');
     })}
 }
-/* FIX: persist() extracted so we can flush instantly on tab close */
 function persist(){
   const chats=state.chats.map(function(ch){
     const o={};for(const k in ch){if(k==='typing')continue;o[k]=ch[k]}
-    /* media data URLs live in Firebase — don't blow up localStorage */
     o.messages=(ch.messages||[]).map(function(m){
       const mm={};for(const k in m){
         if(k==='url'&&isDataUrl(m[k]))continue;
@@ -1298,8 +1284,7 @@ const FB={
 };
 
 /* ════════════════════════════════════════════════════════════
-   8. MEDIA — free mode (base64 inside Firebase) with optional
-   Cloudinary for bigger files. Images auto-compress via canvas.
+   8. MEDIA — free mode (base64 inside Firebase) or Cloudinary
    ════════════════════════════════════════════════════════════ */
 function compressImage(file,maxSide,q){
   return new Promise((res)=>{
@@ -1436,12 +1421,11 @@ async function handleGUser(u){
    ════════════════════════════════════════════════════════════ */
 const Cloud={
   on:false,pres:{},typingMap:{},metaSubs:{},
-  friendsSub:null,requestsSub:null,presSub:null,chatsSub:null,
+  friendsSub:null,presSub:null,chatsSub:null,
   storySub:null,callsSub:null,incomingSub:null,_hb:null,_msgSub:null,_typeSub:null,
   chatIdFor(a,b){return [a,b].sort().join('__')},
   isOnline(u){const v=this.pres[u];return !!(v&&(Date.now()-v)<70000)},
   async checkRules(){
-    /* FIX: retry once — a transient failure must not kill the session */
     for(let i=0;i<2;i++){
       let r;
       try{r=await fetch(CLOUD.fb.dbUrl+'/zahra.json?auth='+FB.tok+'&shallow=true')}
@@ -1460,10 +1444,6 @@ const Cloud={
     this.on=true;
     await this.ensureCode();
     await Promise.all([this.syncFriends(),this.syncChats(),this.syncStories(),this.syncCalls()]);
-    await this.syncRequests();
-    /* FIX: FULL server rebuild — fetch every chat's messages from
-       Firebase on boot so data ALWAYS returns, even on a brand-new
-       device or after the local cache was lost */
     await Promise.all(state.chats.map(c=>this.fetchMessages(c.id,true).catch(()=>{})));
     this.resubAll();
     saveNow();
@@ -1472,14 +1452,12 @@ const Cloud={
   },
   resubAll(){
     if(this.friendsSub)FB.unlisten(this.friendsSub);
-    if(this.requestsSub)FB.unlisten(this.requestsSub);
     if(this.presSub)FB.unlisten(this.presSub);
     if(this.chatsSub)FB.unlisten(this.chatsSub);
     if(this.storySub)FB.unlisten(this.storySub);
     if(this.callsSub)FB.unlisten(this.callsSub);
     if(this.incomingSub)FB.unlisten(this.incomingSub);
     this.friendsSub=FB.listen('/zahra/friends/'+FB.uid,debounce(()=>this.syncFriends(),300));
-    this.requestsSub=FB.listen('/zahra/requests/'+FB.uid,debounce(()=>this.syncRequests(),300));
     this.presSub=FB.listen('/zahra/presence',(p,d)=>this.onPresence(p,d));
     this.chatsSub=FB.listen('/zahra/userChats/'+FB.uid,debounce(()=>this.syncChats(),300));
     this.storySub=FB.listen('/zahra/stories',debounce(()=>this.syncStories(),400));
@@ -1491,7 +1469,7 @@ const Cloud={
   teardown(){
     this.on=false;this.pres={};this.typingMap={};
     FB.closeAll();this.metaSubs={};
-    this.friendsSub=null;this.requestsSub=null;this.presSub=null;this.chatsSub=null;
+    this.friendsSub=null;this.presSub=null;this.chatsSub=null;
     this.storySub=null;this.callsSub=null;this.incomingSub=null;this._msgSub=null;this._typeSub=null;
     clearInterval(this._hb);
     if(typeof renderAppbar==='function')renderAppbar();},
@@ -1540,24 +1518,6 @@ const Cloud={
     }
     if(curTab==='contacts')renderContacts('');
     renderNewChatIfOpen();
-  },
-  async syncRequests(){
-    let data=null;try{data=await FB.get('/zahra/requests/'+FB.uid)||{}}catch(e){return}
-    const arr=[];
-    for(const id in data){
-      const r=data[id];if(!r||!r.from)continue;
-      let prof={};
-      try{prof=await FB.get('/zahra/users/'+r.from)||{}}catch(e){}
-      arr.push({id:id,from:r.from,ts:r.ts||0,name:prof.name||'User',username:prof.username||'',
-        photo:prof.photo||'',hue:(prof.hue!=null)?prof.hue:220});
-    }
-    const grew=arr.length>((state.requests&&state.requests.length)||0);
-    state.requests=arr;
-    if(grew&&arr.length){
-      if(navigator.vibrate)navigator.vibrate([150,80,150]);
-      toast(t('new_request'));
-    }
-    if(curTab==='contacts')renderContacts('');
   },
   onPresence(rel,data){
     if(rel==='/'){this.pres={};if(data)for(const k in data){const v=data[k];this.pres[k]=(v&&typeof v==='object')?(v.on||0):(v||0)}}
@@ -1690,6 +1650,66 @@ const Cloud={
   sendTyping(){
     if(!this.on||!curChatId||!FB.tok)return;
     FB.put('/zahra/typing/'+curChatId+'/'+FB.uid,Date.now()).catch(()=>{});
+  },
+  /* NEW: instant connect — code match = both sides become friends
+     right away + an automatic greeting message is written so the
+     chat is ready; a reply from the other side lands in real time */
+  async connectByCode(code){
+    const found=await FB.get('/zahra/codes/'+code);
+    if(!found)throw new Error('NOTFOUND');
+    if(found===FB.uid)throw new Error('SELF');
+    /* write both friendship edges + chat shells in ONE patch (atomic) */
+    const upd={};
+    upd['/zahra/friends/'+FB.uid+'/'+found]=true;
+    upd['/zahra/friends/'+found+'/'+FB.uid]=true;
+    const cid=this.chatIdFor(FB.uid,found);
+    /* members + userChats entries */
+    upd['/zahra/userChats/'+FB.uid+'/'+cid]={pinned:false,muted:false,lastRead:0};
+    upd['/zahra/userChats/'+found+'/'+cid]={pinned:false,muted:false,lastRead:0};
+    await FB.patch('/zahra',upd).catch(async()=>{
+      /* fallback: sequential writes if root patch is blocked */
+      await FB.put('/zahra/friends/'+FB.uid+'/'+found,true);
+      await FB.put('/zahra/friends/'+found+'/'+FB.uid,true);
+      await FB.patch('/zahra/userChats/'+FB.uid+'/'+cid,{pinned:false,muted:false,lastRead:0});
+      await FB.patch('/zahra/userChats/'+found+'/'+cid,{pinned:false,muted:false,lastRead:0});
+    });
+    /* greeting message so the reply flow starts immediately */
+    await this.pushMessage(cid,found,{text:t('greeting')});
+    /* refresh local state instantly (no delay) */
+    await Promise.all([this.syncFriends(),this.syncChats()]);
+    return found;
+  },
+  /* shared message writer (used by chat send + instant connect) */
+  async pushMessage(cid,peerUid,extra){
+    const members={};members[FB.uid]=true;members[peerUid]=true;
+    const temp={id:'t'+uid(),from:'me',ts:Date.now(),status:'up'};
+    for(const k in extra){temp[k]=extra[k]}
+    const ch=chatById(cid);
+    if(ch){
+      ch.messages.push(temp);
+      if(curChatId===cid){$('#msgList').appendChild(msgEl(ch,temp));scrollBottom(true)}
+    }
+    (async()=>{
+      try{
+        temp.status='sent';
+        if(ch)refreshMsg(temp);
+        const payload={from:FB.uid,ts:temp.ts};
+        ['text','kind','url','fname','fsize','dur','bars','replyTo'].forEach(k=>{if(temp[k]!=null)payload[k]=temp[k]});
+        payload.members=members;
+        const key=await FB.post('/zahra/messages/'+cid,payload);
+        const oldId=temp.id;temp.id=key;temp.status='delivered';
+        if(ch){
+          const row=findMsgRow(oldId);if(row)row.dataset.mid=key;
+          refreshMsg(temp);
+        }
+        await FB.patch('/zahra/chats/'+cid,{members:members,lastText:metaTextFor(temp).slice(0,80),lastTs:temp.ts,lastFrom:FB.uid,lastKind:temp.kind||''});
+        save();
+      }catch(e){
+        temp.status='up';if(ch)refreshMsg(temp);
+        toast(t('upload_failed'),'err');
+      }
+    })();
+    return temp;
   },
   async syncStories(){
     let data=null;try{data=await FB.get('/zahra/stories')||{}}catch(e){return}
@@ -1977,7 +1997,7 @@ function renderCalls(){
 }
 
 /* ════════════════════════════════════════════════════════════
-   14. FRIENDS / CONTACTS (+ unique code system)
+   14. FRIENDS / CONTACTS — instant connect by unique code
    ════════════════════════════════════════════════════════════ */
 function renderContacts(q){
   const list=$('#contactList');list.innerHTML='';
@@ -1987,25 +2007,6 @@ function renderContacts(q){
   const af=el('button','btn primary',t('add_friend'));
   af.onclick=openAddFriend;top.appendChild(af);
   list.appendChild(top);
-  const reqs=(state.requests||[]);
-  if(reqs.length){
-    list.appendChild(el('div','sectitle',t('requests')+' ('+reqs.length+')'));
-    const rg=el('div','group');
-    reqs.forEach(r=>{
-      const row=el('div','row');
-      const av=el('span','ava');av.innerHTML=avatarHTML(r.name,r.hue,42,r.photo);row.appendChild(av);
-      const rl=el('div','rl');rl.appendChild(el('b',null,r.name));
-      rl.appendChild(el('span',null,r.username?'@'+r.username:''));row.appendChild(rl);
-      const btns=el('span','reqbtns');
-      const ok=el('button','btn primary',t('accept'));
-      ok.onclick=()=>acceptRequest(r);
-      const no=el('button','btn ghost',t('decline'));
-      no.onclick=()=>declineRequest(r);
-      btns.appendChild(ok);btns.appendChild(no);row.appendChild(btns);
-      rg.appendChild(row);
-    });
-    list.appendChild(rg);
-  }
   const head=el('label','field');head.style.margin='12px 6px 14px';
   head.innerHTML='<span class="fic">'+ic('search')+'</span>';
   const inp=el('input');inp.placeholder=t('contacts_search');inp.value=q||'';inp.oninput=()=>renderContacts(inp.value);
@@ -2037,6 +2038,7 @@ function openMyCode(){
     body.appendChild(cp);
   });
 }
+/* instant connect: code match → friends immediately + greeting message */
 function openAddFriend(){
   openSheet(t('add_friend'),(body,close)=>{
     body.appendChild(el('p',null,t('add_friend_h'))).style.cssText='font-size:13px;color:var(--text2);margin:0 4px 10px';
@@ -2046,51 +2048,45 @@ function openAddFriend(){
     const find=el('button','btn primary',t('find'));
     row.appendChild(inp);row.appendChild(find);body.appendChild(row);
     const res=el('div');res.style.marginTop='14px';body.appendChild(res);
-    async function doFind(){
+    async function doConnect(){
       const code=normCode(inp.value);
-      res.innerHTML='';
       if(!code){toast(t('err_required'),'err');return}
       if(code===state.myCode){toast(t('self_code'),'err');return}
-      find.disabled=true;
+      find.disabled=true;res.innerHTML='';
+      const spin=el('div','spinner');spin.style.margin='14px auto 4px';
+      res.appendChild(spin);
       try{
-        const found=await FB.get('/zahra/codes/'+code);
-        if(!found){toast(t('not_found_code'),'err');find.disabled=false;return}
-        if(state.contacts.some(c=>c.id===found&&!c.orphan)){toast(t('already_friend'),'err');find.disabled=false;return}
-        const prof=await FB.get('/zahra/users/'+found)||{};
-        const card=el('div','card');card.style.cssText='display:flex;align-items:center;gap:12px;padding:14px';
-        card.innerHTML='<span class="ava" style="display:inline-block">'+avatarHTML(prof.name||'User',(prof.hue!=null)?prof.hue:220,52,prof.photo||'')+'</span>';
+        const peerUid=await Cloud.connectByCode(code);
+        const prof=await FB.get('/zahra/users/'+peerUid)||{};
+        res.innerHTML='';
+        const ok=el('div','card');ok.style.cssText='display:flex;align-items:center;gap:12px;padding:14px;border-color:rgba(34,197,94,.4)';
+        ok.innerHTML='<span class="ava" style="display:inline-block">'+avatarHTML(prof.name||'User',(prof.hue!=null)?prof.hue:220,52,prof.photo||'')+'</span>';
         const pd=el('div');pd.style.flex='1';
         const nb=el('b',null,prof.name||'User');nb.style.cssText='font-size:15px;font-weight:700;display:block';pd.appendChild(nb);
-        const sub=el('div',null,prof.username?'@'+prof.username:'');sub.style.cssText='font-size:12.5px;color:var(--text2)';pd.appendChild(sub);
-        card.appendChild(pd);
-        const send=el('button','btn soft',t('send_request'));
-        send.onclick=async()=>{
-          send.disabled=true;
-          try{await FB.post('/zahra/requests/'+found,{from:FB.uid,ts:Date.now()});close();toast(t('request_sent'))}
-          catch(e){send.disabled=false;toast(t('err_network'),'err')}
+        const sub=el('div',null,t('friend_connected').split('{n}').join(prof.name||'User'));sub.style.cssText='font-size:12px;color:var(--ok);font-weight:700';pd.appendChild(sub);
+        ok.appendChild(pd);
+        const open=el('button','btn primary',t('message'));
+        open.onclick=()=>{closeSub('ss-privacy');close();
+          const cid=Cloud.chatIdFor(FB.uid,peerUid);
+          openChat(cid);
         };
-        card.appendChild(send);
-        res.appendChild(card);
-      }catch(e){toast(t('not_found_code'),'err')}
+        ok.appendChild(open);
+        res.appendChild(ok);
+        toast(tf('friend_connected',{n:prof.name||'User'}));
+        renderContacts('');
+      }catch(e){
+        res.innerHTML='';
+        const m=String(e&&e.message||'');
+        if(m.indexOf('SELF')>=0)toast(t('self_code'),'err');
+        else if(m.indexOf('NOTFOUND')>=0)toast(t('not_found_code'),'err');
+        else toast(t('err_network'),'err');
+      }
       find.disabled=false;
     }
-    find.onclick=doFind;
-    inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();doFind()}};
+    find.onclick=doConnect;
+    inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();doConnect()}};
     setTimeout(()=>inp.focus(),300);
   });
-}
-async function acceptRequest(req){
-  try{
-    await FB.put('/zahra/friends/'+FB.uid+'/'+req.from,true);
-    await FB.put('/zahra/friends/'+req.from+'/'+FB.uid,true);
-    await FB.put('/zahra/requests/'+FB.uid+'/'+req.id,null);
-    toast(tf('friend_now',{n:req.name}));
-    Cloud.syncFriends();Cloud.syncRequests();
-  }catch(e){toast(t('err_network'),'err')}
-}
-async function declineRequest(req){
-  try{await FB.put('/zahra/requests/'+FB.uid+'/'+req.id,null)}catch(e){}
-  Cloud.syncRequests();
 }
 function openContactSheet(cid){
   const ct=contactById(cid);if(!ct)return;
@@ -2982,6 +2978,8 @@ function openProfileEditor(){
       const nm=nameI.value.trim();if(!nm){err.textContent=t('err_required');return}
       state.user={name:nm,username:state.user.username,bio:bioI.value.trim().slice(0,120),hue:hue,
         photo:state.user.photo||'',email:state.user.email};
+      /* FIX: name is written to Firebase immediately — it now survives
+         leaving the site, new devices, and any local cache loss */
       if(Cloud.on)FB.patch('/zahra/users/'+FB.uid,{name:nm,bio:state.user.bio,hue:hue}).catch(()=>{});
       save();close();renderAll();$('#railAva').innerHTML=avatarHTML(nm,hue,40,state.user.photo);toast(t('profile_saved'))};
     m.appendChild(f);setTimeout(()=>nameI.focus(),120);
@@ -3302,7 +3300,6 @@ window.addEventListener('popstate',()=>{
   if($('#paneDetail').classList.contains('open')){closeChat();return}
   const open=$('.subscreen.open');if(open)closeSub(open.id);
 });
-/* FIX: flush pending saves the moment the tab is hidden or closed */
 function flushOnLeave(){
   if(state)saveNow();
   if(Cloud.on&&FB.tok){
@@ -3322,8 +3319,6 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)flushOnLeav
   const go=()=>{showScreen(state.user?'s-main':'s-welcome');if(state.user){setTab('chats');renderAll()}};
   setTimeout(go,REDUCED?250:1650);
   $('#s-splash').addEventListener('click',go);
-  /* FIX: session restore now rebuilds the user from Firebase even if
-     local prefs were lost — data always follows the account */
   const sess=store.get(KEY+'_sess',null);
   let restored=false;
   if(sess&&sess.rtok){
@@ -3340,7 +3335,6 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)flushOnLeav
             email:prof.email||FB.email||''};
         }
       }else{
-        /* server profile is the truth — merge it in */
         state.user={name:prof.name||state.user.name,
           username:prof.username||state.user.username,
           bio:(prof.bio!=null)?prof.bio:state.user.bio,
